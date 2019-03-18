@@ -14,6 +14,7 @@ import (
 	"github.com/elastos/Elastos.ELA.SPV/wallet/store"
 
 	"github.com/elastos/Elastos.ELA/common"
+	"github.com/elastos/Elastos.ELA/common/config"
 	"github.com/elastos/Elastos.ELA/core/types"
 	"github.com/elastos/Elastos.ELA/p2p/addrmgr"
 	"github.com/elastos/Elastos.ELA/p2p/connmgr"
@@ -122,7 +123,7 @@ func TestNewSPVService(t *testing.T) {
 	test.SkipShort(t)
 	interrupt := signal.NewInterrupt()
 
-	backend := elalog.NewBackend(os.Stdout, elalog.Lshortfile)
+	backend := elalog.NewBackend(os.Stdout, elalog.Llongfile)
 	admrlog := backend.Logger("ADMR", elalog.LevelOff)
 	cmgrlog := backend.Logger("CMGR", elalog.LevelOff)
 	bcdblog := backend.Logger("BCDB", elalog.LevelDebug)
@@ -141,22 +142,13 @@ func TestNewSPVService(t *testing.T) {
 	store.UseLogger(bcdblog)
 	sync.UseLogger(synclog)
 
-	seedList := []string{
-		"node-testnet-001.elastos.org:21866",
-		"node-testnet-002.elastos.org:21866",
-		"node-testnet-003.elastos.org:21866",
-	}
-
-	config := &Config{
-		Magic:          2018001,
-		Foundation:     "8ZNizBf4KhhPjeJRGpox6rPcHE5Np6tFx3",
-		SeedList:       seedList,
-		DefaultPort:    22866,
+	cfg := &Config{
+		ChainParams:    config.DefaultParams.TestNet(),
 		MinOutbound:    8,
 		MaxConnections: 100,
 	}
 
-	service, err := newSpvService(config)
+	service, err := NewSPVService(cfg)
 	if err != nil {
 		t.Errorf("NewSPVService error %s", err.Error())
 	}
@@ -197,15 +189,13 @@ out:
 
 		case <-syncTicker.C:
 
-			best, err := service.headers.GetBest()
-			if !assert.NoError(t, err) {
-				t.FailNow()
-			}
+			best := service.GetHeight()
 
-			height := uint32(rand.Int31n(int32(best.Height)))
+			height := uint32(rand.Int31n(int32(best)))
 
 			t.Logf("GetBlock from height %d", height)
-			_, err = service.headers.GetByHeight(height)
+			headers := service.HeaderStore()
+			_, err = headers.GetByHeight(height)
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}
@@ -226,7 +216,7 @@ out:
 				}
 			}
 
-			if service.IService.IsCurrent() {
+			if service.IsCurrent() {
 				// Clear test data
 				err := service.ClearData()
 				if err != nil {

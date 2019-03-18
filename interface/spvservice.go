@@ -39,21 +39,13 @@ type spvservice struct {
 	listeners map[common.Uint256]TransactionListener
 }
 
-func newSpvService(cfg *Config) (*spvservice, error) {
-	if cfg.Foundation == "" {
-		cfg.Foundation = "8VYXVxKKSAxkmRrfmGpQR2Kc66XhG6m3ta"
-	}
-
-	foundation, err := common.Uint168FromAddress(cfg.Foundation)
-	if err != nil {
-		return nil, fmt.Errorf("Parse foundation address error %s", err)
-	}
-
+// NewSPVService creates a new SPV service instance.
+func NewSPVService(cfg *Config) (SPVService, error) {
 	dataDir := defaultDataDir
 	if len(cfg.DataDir) > 0 {
 		dataDir = cfg.DataDir
 	}
-	_, err = os.Stat(dataDir)
+	_, err := os.Stat(dataDir)
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(dataDir, os.ModePerm)
 		if err != nil {
@@ -80,17 +72,18 @@ func newSpvService(cfg *Config) (*spvservice, error) {
 
 	chainStore := database.NewChainDB(headerStore, service)
 
+	params := cfg.ChainParams
 	serviceCfg := &sdk.Config{
 		DataDir:     dataDir,
-		Magic:       cfg.Magic,
-		SeedList:    cfg.SeedList,
-		DefaultPort: cfg.DefaultPort,
+		Magic:       params.Magic,
+		SeedList:    params.SeedList,
+		DefaultPort: params.DefaultPort,
 		MaxPeers:    cfg.MaxConnections,
 		CandidateFlags: []uint64{
 			uint64(pact.SFNodeNetwork),
 			uint64(pact.SFNodeBloom),
 		},
-		GenesisHeader:  GenesisHeader(foundation),
+		GenesisHeader:  GenesisHeader(params.GenesisBlock),
 		ChainStore:     chainStore,
 		NewTransaction: newTransaction,
 		NewBlockHeader: newBlockHeader,
@@ -184,7 +177,7 @@ func (s *spvservice) GetTransactionIds(height uint32) ([]*common.Uint256, error)
 	return s.db.Txs().GetIds(height)
 }
 
-func (s *spvservice) HeaderStore() database.Headers {
+func (s *spvservice) HeaderStore() store.HeaderStore {
 	return s.headers
 }
 
@@ -520,4 +513,18 @@ func getConfirmations(tx types.Transaction) uint32 {
 		return 100
 	}
 	return DefaultConfirmations
+}
+
+func newBlockHeader() util.BlockHeader {
+	return iutil.NewHeader(&types.Header{})
+}
+
+func newTransaction() util.Transaction {
+	return iutil.NewTx(&types.Transaction{})
+}
+
+// GenesisHeader creates a specific genesis header by the given
+// foundation address.
+func GenesisHeader(genesisBlock *types.Block) util.BlockHeader {
+	return iutil.NewHeader(&genesisBlock.Header)
 }

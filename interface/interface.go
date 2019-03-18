@@ -2,9 +2,10 @@ package _interface
 
 import (
 	"github.com/elastos/Elastos.ELA.SPV/bloom"
-	"github.com/elastos/Elastos.ELA.SPV/database"
+	"github.com/elastos/Elastos.ELA.SPV/interface/store"
 
 	"github.com/elastos/Elastos.ELA/common"
+	"github.com/elastos/Elastos.ELA/common/config"
 	"github.com/elastos/Elastos.ELA/core/types"
 )
 
@@ -13,18 +14,8 @@ type Config struct {
 	// DataDir is the data path to store db files peer addresses etc.
 	DataDir string
 
-	// The magic number that specify which network to connect.
-	Magic uint32
-
-	// The foundation address of the genesis block, which is different between
-	// MainNet, TestNet, RegNet etc.
-	Foundation string
-
-	// The public seed peers addresses.
-	SeedList []string
-
-	// DefaultPort is the default port for public peers provide services.
-	DefaultPort uint16
+	// The chain parameters within network settings.
+	ChainParams *config.Params
 
 	// The minimum target outbound connections.
 	MinOutbound int
@@ -67,7 +58,7 @@ type SPVService interface {
 	GetTransactionIds(height uint32) ([]*common.Uint256, error)
 
 	// Get headers database
-	HeaderStore() database.Headers
+	HeaderStore() store.HeaderStore
 
 	// IsCurrent returns if the SPV service synced to best height with the main
 	// blockchain.
@@ -84,6 +75,24 @@ type SPVService interface {
 
 	// ClearData delete all data stores data including HeaderStore and DataStore.
 	ClearData() error
+}
+
+// DPOSConfig extends the SPV service config and add DPOS parameters.
+type DPOSConfig struct {
+	Config
+
+	// OnProducersChanged method will be invoked when current producers changed.
+	OnProducersChanged func(sideProducerIDs [][]byte)
+}
+
+// DPOSSPVService extents the SPVService and implement DPOS consensus support.
+type DPOSSPVService interface {
+	// Extends the original SPVService interface.
+	SPVService
+
+	// GetProducersByHeight returns the side chain block producer IDs on the
+	// specific height.
+	GetProducersByHeight(height uint32) [][]byte
 }
 
 const (
@@ -113,8 +122,4 @@ type TransactionListener interface {
 	// with the merkle tree proof to verify it, the notifyId is key of this
 	// notify message and it must be submitted with the receipt together.
 	Notify(notifyId common.Uint256, proof bloom.MerkleProof, tx types.Transaction)
-}
-
-func NewSPVService(config *Config) (SPVService, error) {
-	return newSpvService(config)
 }
